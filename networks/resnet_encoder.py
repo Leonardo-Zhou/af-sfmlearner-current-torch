@@ -93,6 +93,24 @@ def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1):
             }
             model_url = model_urls[num_layers]
             loaded = model_zoo.load_url(model_url)
+        
+                # 处理多图像输入的权重维度不匹配问题
+        model_dict = model.state_dict()
+        pretrained_dict = {k: v for k, v in loaded.items() if k in model_dict}
+        
+        # 处理第一层卷积权重（输入通道数可能不同）
+        if 'conv1.weight' in pretrained_dict:
+            if pretrained_dict['conv1.weight'].shape != model_dict['conv1.weight'].shape:
+                # 对于多图像输入，复制权重到多个通道
+                original_weight = pretrained_dict['conv1.weight']
+                if num_input_images > 1:
+                    new_weight = original_weight.repeat(1, num_input_images, 1, 1) / num_input_images
+                    pretrained_dict['conv1.weight'] = new_weight
+        
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict)
+    
+    return model  # 关键修复：确保函数总是返回模型
 
 
 class ResnetEncoder(nn.Module):
