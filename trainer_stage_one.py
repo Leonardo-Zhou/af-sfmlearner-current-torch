@@ -198,7 +198,31 @@ class Trainer:
         
         参数:
             inputs: 输入数据字典，包含增强后的图像
-            
+            形如
+            {
+                # 原始图像（不同尺度和帧索引）
+                ("color", 0, -1): PIL.Image,      # 参考帧原始图像
+                ("color", -1, -1): PIL.Image,   # 前一帧原始图像  
+                ("color", 1, -1): PIL.Image,    # 后一帧原始图像
+                
+                # 经过预处理和增强的张量
+                ("color", 0, 0): torch.Tensor,    # 参考帧（目标分辨率）
+                ("color", -1, 0): torch.Tensor,   # 前一帧（目标分辨率）
+                ("color", 1, 0): torch.Tensor,    # 后一帧（目标分辨率）
+                
+                # 数据增强版本
+                ("color_aug", 0, 0): torch.Tensor,    # 增强后的参考帧
+                ("color_aug", -1, 0): torch.Tensor,   # 增强后的前一帧
+                ("color_aug", 1, 0): torch.Tensor,    # 增强后的后一帧
+                
+                # 相机内参矩阵
+                ("K", 0): torch.Tensor,           # 目标尺度的相机内参
+                ("inv_K", 0): torch.Tensor,      # 目标尺度的逆相机内参
+                
+                # 可能包含的其他数据
+                "stereo_T": torch.Tensor,         # 立体相机外参（如果使用立体数据）
+                "depth_gt": torch.Tensor,         # 深度图真值（如果可用）
+            }
         返回:
             outputs: 包含光流和配准后图像的字典
         """
@@ -297,7 +321,7 @@ class Trainer:
         """
         self.set_eval()  # 评估模式
         try:
-            inputs = next(self.val_iter)  # 修复：使用next()函数而不是.next()方法
+            inputs = next( _iter)  # 修复：使用next()函数而不是.next()方法
         except StopIteration:
             self.val_iter = iter(self.val_loader)  # 重置迭代器
             inputs = next(self.val_iter)  # 修复：使用next()函数
