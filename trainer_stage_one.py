@@ -297,10 +297,10 @@ class Trainer:
         """
         self.set_eval()  # 评估模式
         try:
-            inputs = self.val_iter.next()
+            inputs = next(self.val_iter)  # 修复：使用next()函数而不是.next()方法
         except StopIteration:
             self.val_iter = iter(self.val_loader)  # 重置迭代器
-            inputs = self.val_iter.next()
+            inputs = next(self.val_iter)  # 修复：使用next()函数
 
         with torch.no_grad():  # 不计算梯度
             outputs, losses = self.process_batch_val(inputs)
