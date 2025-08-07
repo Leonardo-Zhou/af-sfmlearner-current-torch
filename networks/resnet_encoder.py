@@ -78,20 +78,21 @@ def resnet_multiimage_input(num_layers, pretrained=False, num_input_images=1):
     model = ResNetMultiImageInput(block_type, blocks, num_input_images=num_input_images)
 
     if pretrained:
-        # 加载预训练权重（兼容torchvision 0.22.2）
-        model_url = models.resnet.model_urls[f'resnet{num_layers}']
-        loaded = model_zoo.load_url(model_url)
-        
-        # 适配多图像输入：复制并平均化第一个卷积层的权重
-        # 将3通道的预训练权重扩展到num_input_images*3通道
-        original_weight = loaded['conv1.weight']  # [64, 3, 7, 7]
-        expanded_weight = torch.cat([original_weight] * num_input_images, dim=1) / num_input_images
-        loaded['conv1.weight'] = expanded_weight
-        
-        # 加载修改后的权重
-        model.load_state_dict(loaded)
-    
-    return model
+        # 修复：替换model_urls的使用
+        try:
+            # 新版本torchvision
+            if num_layers == 18:
+                loaded = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1).state_dict()
+            elif num_layers == 50:
+                loaded = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1).state_dict()
+        except AttributeError:
+            # 旧版本torchvision
+            model_urls = {
+                18: 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
+                50: 'https://download.pytorch.org/models/resnet50-19c8e357.pth'
+            }
+            model_url = model_urls[num_layers]
+            loaded = model_zoo.load_url(model_url)
 
 
 class ResnetEncoder(nn.Module):
