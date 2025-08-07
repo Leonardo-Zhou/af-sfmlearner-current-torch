@@ -1,8 +1,7 @@
 --index-url https://download.pytorch.org/whl/cu126
-torch==2.7.1+cu126
-torchvision==0.22.2+cu126
+torch==2.8.0+cu126
+torchvision==0.23.0+cu126
 Pillow==11.0.0
-numpy
 matplotlib
 opencv-python
 scipy

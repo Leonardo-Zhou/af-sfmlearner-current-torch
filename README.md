@@ -56,6 +56,7 @@ Stage one:
 
 ```shell
 CUDA_VISIBLE_DEVICES=0 python train_stage_one.py --data_path <your_data_path> --log_dir <path_to_save_model (optical flow)>
+CUDA_VISIBLE_DEVICES=0 python train_stage_one.py --data_path '/mnt/data/publicData/MICCAI19_SCARED/train' --log_dir 'optical_flow_model'
 ```
 
 Stage two:
