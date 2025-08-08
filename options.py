@@ -221,6 +221,6 @@ class MonodepthOptions:
                                       "from the original monodepth paper",
                                  action="store_true")
 
-    def parse(self):
-        self.options = self.parser.parse_args()
+    def parse(self, args=None):
+        self.options = self.parser.parse_args(args)
         return self.options

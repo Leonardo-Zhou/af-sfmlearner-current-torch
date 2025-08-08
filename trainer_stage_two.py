@@ -702,28 +702,104 @@ class Trainer(object):
             
         self.set_train()
 
-    # 以下方法需要在后续代码中实现
     def log_time(self, batch_idx, duration, loss):
-        """记录训练时间信息"""
-        # 实现时间记录逻辑
-        pass
-        
+        """Print a logging statement to the terminal
+        """
+        samples_per_sec = self.opt.batch_size / duration
+        time_sofar = time.time() - self.start_time
+        training_time_left = (
+            self.num_total_steps / self.step - 1.0) * time_sofar if self.step > 0 else 0
+        print_string = "epoch {:>3} | batch {:>6} | examples/s: {:5.1f}" + \
+            " | loss: {:.5f} | time elapsed: {} | time left: {}"
+        print(print_string.format(self.epoch, batch_idx, samples_per_sec, loss,
+                                  sec_to_hm_str(time_sofar), sec_to_hm_str(training_time_left)))
+
     def log(self, mode, inputs, outputs, losses):
-        """记录训练/验证日志"""
-        # 实现日志记录逻辑
-        pass
-        
-    def load_model(self):
-        """加载模型权重"""
-        # 实现模型加载逻辑
-        pass
-        
-    def save_model(self):
-        """保存模型权重"""
-        # 实现模型保存逻辑
-        pass
-        
+        """Write an event to the tensorboard events file
+        """
+        writer = self.writers[mode]
+        for l, v in losses.items():
+            writer.add_scalar("{}".format(l), v, self.step)
+
+        for j in range(min(4, self.opt.batch_size)):  # write a maxmimum of four images
+            for s in self.opt.scales:
+                for frame_id in self.opt.frame_ids[1:]:
+
+                    writer.add_image(
+                        "brightness_{}_{}/{}".format(frame_id, s, j),
+                        outputs[("transform", "high", s, frame_id)][j].data, self.step)
+                    writer.add_image(
+                        "registration_{}_{}/{}".format(frame_id, s, j),
+                        outputs[("registration", s, frame_id)][j].data, self.step)
+                    writer.add_image(
+                        "refined_{}_{}/{}".format(frame_id, s, j),
+                        outputs[("refined", s, frame_id)][j].data, self.step)
+                    if s == 0:
+                        writer.add_image(
+                            "occu_mask_backward_{}_{}/{}".format(frame_id, s, j),
+                            outputs[("occu_mask_backward", s, frame_id)][j].data, self.step)
+
+                writer.add_image(
+                    "disp_{}/{}".format(s, j),
+                    normalize_image(outputs[("disp", s)][j]), self.step)
+
     def save_opts(self):
-        """保存训练配置"""
-        # 实现配置保存逻辑
-        pass
+        """Save options to disk so we know what we ran this experiment with
+        """
+        models_dir = os.path.join(self.log_path, "models")
+        if not os.path.exists(models_dir):
+            os.makedirs(models_dir)
+        to_save = self.opt.__dict__.copy()
+
+        with open(os.path.join(models_dir, 'opt.json'), 'w') as f:
+            json.dump(to_save, f, indent=2)
+
+    def save_model(self):
+        """Save model weights to disk
+        """
+        save_folder = os.path.join(self.log_path, "models", "weights_{}".format(self.epoch))
+        if not os.path.exists(save_folder):
+            os.makedirs(save_folder)
+
+        for model_name, model in self.models.items():
+            save_path = os.path.join(save_folder, "{}.pth".format(model_name))
+            to_save = model.state_dict()
+            if model_name == 'encoder':
+                # save the sizes - these are needed at prediction time
+                to_save['height'] = self.opt.height
+                to_save['width'] = self.opt.width
+                to_save['use_stereo'] = self.opt.use_stereo
+            torch.save(to_save, save_path)
+
+        save_path = os.path.join(save_folder, "{}.pth".format("adam"))
+        torch.save(self.model_optimizer.state_dict(), save_path)
+
+    def load_model(self):
+        """Load model(s) from disk
+        """
+        self.opt.load_weights_folder = os.path.expanduser(self.opt.load_weights_folder)
+
+        assert os.path.isdir(self.opt.load_weights_folder), \
+            "Cannot find folder {}".format(self.opt.load_weights_folder)
+        print("loading model from folder {}".format(self.opt.load_weights_folder))
+
+        for n in self.opt.models_to_load:
+            print("Loading {} weights...".format(n))
+            path = os.path.join(self.opt.load_weights_folder, "{}.pth".format(n))
+            model_dict = self.models[n].state_dict()
+            pretrained_dict = torch.load(path)
+            pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+            model_dict.update(pretrained_dict)
+            self.models[n].load_state_dict(model_dict)
+            self.models[n].eval()
+            for param in self.models[n].parameters():
+                param.requires_grad = False
+
+        # loading adam state
+        # optimizer_load_path = os.path.join(self.opt.load_weights_folder, "adam.pth")
+        # if os.path.isfile(optimizer_load_path):
+            # print("Loading Adam weights")
+            # optimizer_dict = torch.load(optimizer_load_path)
+            # self.model_optimizer.load_state_dict(optimizer_dict)
+        # else:
+        print("Adam is randomly initialized")
