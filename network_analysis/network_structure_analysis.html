@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SfM Learner 网络结构详细分析</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .network-card {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .architecture-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .architecture-table th, .architecture-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .architecture-table th {
+            background-color: #007bff;
+            color: white;
+        }
+        .parameter-info {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .flow-diagram {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .layer-box {
+            display: inline-block;
+            padding: 10px 15px;
+            margin: 5px;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            background: #f8f9fa;
+        }
+        .arrow {
+            font-size: 20px;
+            color: #007bff;
+            margin: 0 10px;
+        }
+        .code-block {
+            background: #f4f4f4;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SfM Learner 网络结构详细分析</h1>
+        <p>本文档详细分析了SfM Learner项目中所有网络的完整结构，包括数据流变化、通道变化、维度变化和层结构。</p>
+
+        <h2>📊 项目概览</h2>
+        <p>该项目包含以下主要网络模块：</p>
+        <ul>
+            <li><strong>ResNetEncoder</strong>: 特征提取编码器（ResNet架构）</li>
+            <li><strong>DepthDecoder</strong>: 深度估计解码器（U-Net架构）</li>
+            <li><strong>PoseDecoder</strong>: 姿态估计解码器</li>
+            <li><strong>PositionDecoder</strong>: 光流解码器</li>
+            <li><strong>TransformDecoder</strong>: 外观流解码器</li>
+            <li><strong>PoseCNN</strong>: 姿态估计CNN</li>
+        </ul>
+
+        <h2>🏗️ 1. ResNetEncoder - 特征提取编码器</h2>
+        <div class="network-card">
+            <h3>1.1 网络架构</h3>
+            <p><strong>模型类型</strong>: ResNet变体（支持18/34/50/101/152层）</p>
+            <p><strong>基础架构</strong>: 标准ResNet + 多图像输入适配</p>
+            
+            <h4>数据流变化表</h4>
+            <table class="architecture-table">
+                <thead>
+                    <tr>
+                        <th>阶段</th>
+                        <th>操作</th>
+                        <th>输入尺寸</th>
+                        <th>输出尺寸</th>
+                        <th>通道变化</th>
+                        <th>参数数量</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Input</td>
+                        <td>原始图像</td>
+                        <td>[B, C×N, H, W]</td>
+                        <td>-</td>
+                        <td>C×N (N=图像数量)</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>Conv1</td>
+                        <td>7×7卷积, stride=2</td>
+                        <td>[B, C×N, H, W]</td>
+                        <td>[B, 64, H/2, W/2]</td>
+                        <td>C×N → 64</td>
+                        <td>7×7×C×N×64</td>
+                    </tr>
+                    <tr>
+                        <td>MaxPool</td>
+                        <td>3×3最大池化, stride=2</td>
+                        <td>[B, 64, H/2, W/2]</td>
+                        <td>[B, 64, H/4, W/4]</td>
+                        <td>64 → 64</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>Layer1</td>
+                        <td>ResNet Stage1</td>
+                        <td>[B, 64, H/4, W/4]</td>
+                        <td>[B, 64, H/4, W/4]</td>
+                        <td>64 → 64</td>
+                        <td>ResNet18: ~37K</td>
+                    </tr>
+                    <tr>
+                        <td>Layer2</td>
+                        <td>ResNet Stage2</td>
+                        <td>[B, 64, H/4, W/4]</td>
+                        <td>[B, 128, H/8, W/8]</td>
+                        <td>64 → 128</td>
+                        <td>ResNet18: ~220K</td>
+                    </tr>
+                    <tr>
+                        <td>Layer3</td>
+                        <td>ResNet Stage3</td>
+                        <td>[B, 128, H/8, W/8]</td>
+                        <td>[B, 256, H/16, W/16]</td>
+                        <td>128 → 256</td>
+                        <td>ResNet18: ~440K</td>
+                    </tr>
+                    <tr>
+                        <td>Layer4</td>
+                        <td>ResNet Stage4</td>
+                        <td>[B, 256, H/16, W/16]</td>
+                        <td>[B, 512, H/32, W/32]</td>
+                        <td>256 → 512</td>
+                        <td>ResNet18: ~880K</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="parameter-info">
+                <strong>ResNet18通道配置</strong>: [64, 64, 128, 256, 512]<br>
+                <strong>ResNet50通道配置</strong>: [64, 256, 512, 1024, 2048] (Bottleneck×4)<br>
+                <strong>总参数量</strong>: ResNet18约11.2M，ResNet50约23.5M
+            </div>
+        </div>
+
+        <h2>🔍 2. DepthDecoder - 深度估计解码器</h2>
+        <div class="network-card">
+            <h3>2.1 架构概览</h3>
+            <p><strong>模型类型</strong>: U-Net风格解码器</p>
+            <p><strong>上采样方式</strong>: 最近邻插值 (2×上采样)</p>
+            <p><strong>跳跃连接</strong>: 融合编码器对应层特征</p>
+
+            <h4>详细结构表</h4>
+            <table class="architecture-table">
+                <thead>
+                    <tr>
+                        <th>解码阶段</th>
+                        <th>输入尺寸</th>
+                        <th>操作</th>
+                        <th>输出尺寸</th>
+                        <th>通道变化</th>
+                        <th>是否跳跃连接</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Stage4</td>
+                        <td>[B, 512, H/32, W/32]</td>
+                        <td>ConvBlock + Upsample</td>
+                        <td>[B, 256, H/16, W/16]</td>
+                        <td>512 → 256</td>
+                        <td>✓ (Layer3特征)</td>
+                    </tr>
+                    <tr>
+                        <td>Stage3</td>
+                        <td>[B, 256+256, H/16, W/16]</td>
+                        <td>ConvBlock + Upsample</td>
+                        <td>[B, 128, H/8, W/8]</td>
+                        <td>512 → 128</td>
+                        <td>✓ (Layer2特征)</td>
+                    </tr>
+                    <tr>
+                        <td>Stage2</td>
+                        <td>[B, 128+128, H/8, W/8]</td>
+                        <td>ConvBlock + Upsample</td>
+                        <td>[B, 64, H/4, W/4]</td>
+                        <td>256 → 64</td>
+                        <td>✓ (Layer1特征)</td>
+                    </tr>
+                    <tr>
+                        <td>Stage1</td>
+                        <td>[B, 64+64, H/4, W/4]</td>
+                        <td>ConvBlock + Upsample</td>
+                        <td>[B, 32, H/2, W/2]</td>
+                        <td>128 → 32</td>
+                        <td>✓ (Conv1特征)</td>
+                    </tr>
+                    <tr>
+                        <td>Stage0</td>
+                        <td>[B, 32+64, H/2, W/2]</td>
+                        <td>ConvBlock + Upsample</td>
+                        <td>[B, 16, H, W]</td>
+                        <td>96 → 16</td>
+                        <td>×</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h4>输出层配置</h4>
+            <div class="code-block">
+# 多尺度深度输出
+("disp", 0): [B, 1, H, W]      # 最高分辨率
+("disp", 1): [B, 1, H/2, W/2]  # 1/2分辨率
+("disp", 2): [B, 1, H/4, W/4]  # 1/4分辨率
+("disp", 3): [B, 1, H/8, W/8]  # 1/8分辨率
+            </div>
+        </div>
+
+        <h2>🎯 3. PoseDecoder - 姿态估计解码器</h2>
+        <div class="network-card">
+            <h3>3.1 架构特点</h3>
+            <p><strong>输入</strong>: 编码器最后一层特征</p>
+            <p><strong>输出</strong>: 相机姿态参数（轴角+平移）</p>
+
+            <h4>网络结构</h4>
+            <div class="flow-diagram">
+                <div class="layer-box">输入特征<br>[B, C, H/32, W/32]</div>
+                <span class="arrow">→</span>
+                <div class="layer-box">1×1卷积<br>Squeeze 256通道</div>
+                <span class="arrow">→</span>
+                <div class="layer-box">3×3卷积<br>256通道</div>
+                <span class="arrow">→</span>
+                <div class="layer-box">3×3卷积<br>256通道</div>
+                <span class="arrow">→</span>
+                <div class="layer-box">1×1卷积<br>6×(N-1)通道</div>
+                <span class="arrow">→</span>
+                <div class="layer-box">全局平均池化</div>
+            </div>
+
+            <table class="architecture-table">
+                <thead>
+                    <tr>
+                        <th>层名</th>
+                        <th>操作</th>
+                        <th>输入通道</th>
+                        <th>输出通道</th>
+                        <th>核大小</th>
+                        <th>步长</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Squeeze</td>
+                        <td>Conv2d</td>
+                        <td>512 (ResNet18)</td>
+                        <td>256</td>
+                        <td>1×1</td>
+                        <td>1</td>
+                    </tr>
+                    <tr>
+                        <td>Pose_0</td>
+                        <td>Conv2d</td>
+                        <td>256×N</td>
+                        <td>256</td>
+                        <td>3×3</td>
+                        <td>1</td>
+                    </tr>
+                    <tr>
+                        <td>Pose_1</td>
+                        <td>Conv2d</td>
+                        <td>256</td>
+                        <td>256</td>
+                        <td>3×3</td>
+                        <td>1</td>
+                    </tr>
+                    <tr>
+                        <td>Pose_2</td>
+                        <td>Conv2d</td>
+                        <td>256</td>
+                        <td>6×(N-1)</td>
+                        <td>1×1</td>
+                        <td>1</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="parameter-info">
+                <strong>输出格式</strong>:<br>
+                - axisangle: [B, N-1, 1, 3] (轴角表示的旋转)<br>
+                - translation: [B, N-1, 1, 3] (平移向量)
+            </div>
+        </div>
+
+        <h2>🌊 4. PositionDecoder - 光流解码器</h2>
+        <div class="network-card">
+            <h3>4.1 与DepthDecoder的对比</h3>
+            <table class="architecture-table">
+                <thead>
+                    <tr>
+                        <th>特性</th>
+                        <th>DepthDecoder</th>
+                        <th>PositionDecoder</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>输出通道</td>
+                        <td>1 (深度图)</td>
+                        <td>2 (光流x,y)</td>
+                    </tr>
+                    <tr>
+                        <td>激活函数</td>
+                        <td>Sigmoid</td>
+                        <td>无激活函数</td>
+                    </tr>
+                    <tr>
+                        <td>输出范围</td>
+                        <td>[0, 1]</td>
+                        <td>[-∞, +∞]</td>
+                    </tr>
+                    <tr>
+                        <td>权重初始化</td>
+                        <td>默认初始化</td>
+                        <td>N(0, 1e-5)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h4>光流输出结构</h4>
+            <div class="code-block">
+# 多尺度光流输出
+("position", 0): [B, 2, H, W]      # 最高分辨率光流
+("position", 1): [B, 2, H/2, W/2]  # 1/2分辨率光流
+("position", 2): [B, 2, H/4, W/4]  # 1/4分辨率光流
+("position", 3): [B, 2, H/8, W/8]  # 1/8分辨率光流
+            </div>
+        </div>
+
+        <h2>🎨 5. TransformDecoder - 外观流解码器</h2>
+        <div class="network-card">
+            <h3>5.1 架构特点</h3>
+            <p><strong>功能</strong>: 预测外观变化/变形场</p>
+            <p><strong>输出</strong>: 3通道变换参数</p>
+            <p><strong>激活函数</strong>: Tanh (限制输出范围[-1, 1])</p>
+
+            <h4>网络配置</h4>
+            <div class="parameter-info">
+                <strong>输出通道</strong>: 3 (RGB变换参数)<br>
+                <strong>输出范围</strong>: [-1, 1] (通过Tanh激活)<br>
+                <strong>解码器通道</strong>: [16, 32, 64, 128, 256] (与DepthDecoder相同)
+            </div>
+        </div>
+
+        <h2>📐 6. PoseCNN - 姿态估计CNN</h2>
+        <div class="network-card">
+            <h3>6.1 架构特点</h3>
+            <p><strong>输入</strong>: 多帧图像拼接</p>
+            <p><strong>架构</strong>: 标准CNN，无跳跃连接</p>
+            <p><strong>输出</strong>: 相机姿态参数</p>
+
+            <h4>详细结构</h4>
+            <table class="architecture-table">
+                <thead>
+                    <tr>
+                        <th>层</th>
+                        <th>操作</th>
+                        <th>输入通道</th>
+                        <th>输出通道</th>
+                        <th>核大小</th>
+                        <th>步长</th>
+                        <th>输出尺寸</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Conv0</td>
+                        <td>Conv2d</td>
+                        <td>3×N</td>
+                        <td>16</td>
+                        <td>7×7</td>
+                        <td>2</td>
+                        <td>[B, 16, H/2, W/2]</td>
+                    </tr>
+                    <tr>
+                        <td>Conv1</td>
+                        <td>Conv2d</td>
+                        <td>16</td>
+                        <td>32</td>
+                        <td>5×5</td>
+                        <td>2</td>
+                        <td>[B, 32, H/4, W/4]</td>
+                    </tr>
+                    <tr>
+                        <td>Conv2</td>
+                        <td>Conv2d</td>
+                        <td>32</td>
+                        <td>64</td>
+                        <td>3×3</td>
+                        <td>2</td>
+                        <td>[B, 64, H/8, W/8]</td>
+                    </tr>
+                    <tr>
+                        <td>Conv3</td>
+                        <td>Conv2d</td>
+                        <td>64</td>
+                        <td>128</td>
+                        <td>3×3</td>
+                        <td>2</td>
+                        <td>[B, 128, H/16, W/16]</td>
+                    </tr>
+                    <tr>
+                        <td>Conv4</td>
+                        <td>Conv2d</td>
+                        <td>128</td>
+                        <td>256</td>
+                        <td>3×3</td>
+                        <td>2</td>
+                        <td>[B, 256, H/32, W/32]</td>
+                    </tr>
+                    <tr>
+                        <td>Conv5</td>
+                        <td>Conv2d</td>
+                        <td>256</td>
+                        <td>256</td>
+                        <td>3×3</td>
+                        <td>2</td>
+                        <td>[B, 256, H/64, W/64]</td>
+                    </tr>
+                    <tr>
+                        <td>Conv6</td>
+                        <td>Conv2d</td>
+                        <td>256</td>
+                        <td>256</td>
+                        <td>3×3</td>
+                        <td>2</td>
+                        <td>[B, 256, H/128, W/128]</td>
+                    </tr>
+                    <tr>
+                        <td>PoseConv</td>
+                        <td>Conv2d</td>
+                        <td>256</td>
+                        <td>6×(N-1)</td>
+                        <td>1×1</td>
+                        <td>1</td>
+                        <td>[B, 6×(N-1), H/128, W/128]</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2>🔧 7. 核心层组件分析</h2>
+        <div class="network-card">
+            <h3>7.1 ConvBlock 结构</h3>
+            <div class="code-block">
+ConvBlock(
+    ├── Conv3x3(in_channels, out_channels)
+    │   ├── ReflectionPad2d(1)  # 保持尺寸
+    │   └── Conv2d(3, 3, kernel_size=3)
+    └── ELU(inplace=True)      # 激活函数
+)
+            </div>
+
+            <h3>7.2 上采样操作</h3>
+            <div class="code-block">
+upsample(x):
+    return F.interpolate(x, scale_factor=2, mode="nearest")
+# 最近邻插值，2倍上采样
+            </div>
+
+            <h3>7.3 跳跃连接机制</h3>
+            <div class="code-block">
+# 特征融合过程
+features = [upsampled_features]
+if use_skips and i > 0:
+    features += [skip_connection_features]
+x = torch.cat(features, dim=1)  # 通道维度拼接
+            </div>
+        </div>
+
+        <h2>📊 8. 网络参数统计</h2>
+        <div class="network-card">
+            <h3>8.1 各网络参数量对比</h3>
+            <table class="architecture-table">
+                <thead>
+                    <tr>
+                        <th>网络名称</th>
+                        <th>参数量(估算)</th>
+                        <th>输入通道</th>
+                        <th>输出通道</th>
+                        <th>主要用途</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>ResNetEncoder-18</td>
+                        <td>11.2M</td>
+                        <td>3×N</td>
+                        <td>[64,64,128,256,512]</td>
+                        <td>特征提取</td>
+                    </tr>
+                    <tr>
+                        <td>ResNetEncoder-50</td>
+                        <td>23.5M</td>
+                        <td>3×N</td>
+                        <td>[64,256,512,1024,2048]</td>
+                        <td>特征提取</td>
+                    </tr>
+                    <tr>
+                        <td>DepthDecoder</td>
+                        <td>~1.5M</td>
+                        <td>512</td>
+                        <td>4尺度深度图</td>
+                        <td>深度估计</td>
+                    </tr>
+                    <tr>
+                        <td>PoseDecoder</td>
+                        <td>~0.3M</td>
+                        <td>512×N</td>
+                        <td>6×(N-1)</td>
+                        <td>姿态估计</td>
+                    </tr>
+                    <tr>
+                        <td>PositionDecoder</td>
+                        <td>~1.5M</td>
+                        <td>512</td>
+                        <td>4尺度光流</td>
+                        <td>光流估计</td>
+                    </tr>
+                    <tr>
+                        <td>TransformDecoder</td>
+                        <td>~1.5M</td>
+                        <td>512</td>
+                        <td>4尺度变换</td>
+                        <td>外观变换</td>
+                    </tr>
+                    <tr>
+                        <td>PoseCNN</td>
+                        <td>~0.5M</td>
+                        <td>3×N</td>
+                        <td>6×(N-1)</td>
+                        <td>姿态估计(CNN)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2>🔄 9. 数据流总结</h2>
+        <div class="network-card">
+            <h3>9.1 完整数据流</h3>
+            <div class="flow-diagram">
+                <div class="layer-box">输入图像<br>[B,3×N,H,W]</div>
+                <span class="arrow">→</span>
+                <div class="layer-box">ResNetEncoder<br>多尺度特征</div>
+                <span class="arrow">→</span>
+                <div class="layer-box">解码器网络<br>(Depth/Pose/Flow)</div>
+                <span class="arrow">→</span>
+                <div class="layer-box">多尺度输出<br>深度/姿态/光流</div>
+            </div>
+
+            <h3>9.2 特征维度变化总结</h3>
+            <div class="code-block">
+# 以输入256×320为例的完整数据流
+
+# 1. ResNetEncoder输出
+features[0]: [B, 64, 128, 160]   # 1/2分辨率
+features[1]: [B, 64, 64, 80]     # 1/4分辨率  
+features[2]: [B, 128, 32, 40]    # 1/8分辨率
+features[3]: [B, 256, 16, 20]    # 1/16分辨率
+features[4]: [B, 512, 8, 10]     # 1/32分辨率
+
+# 2. DepthDecoder输出
+("disp", 0): [B, 1, 256, 320]    # 全分辨率深度
+("disp", 1): [B, 1, 128, 160]    # 1/2分辨率深度
+("disp", 2): [B, 1, 64, 80]      # 1/4分辨率深度
+("disp", 3): [B, 1, 32, 40]      # 1/8分辨率深度
+            </div>
+        </div>
+
+        <h2>📝 10. 使用示例</h2>
+        <div class="network-card">
+            <h3>10.1 网络初始化示例</h3>
+            <div class="code-block">
+import torch
+from networks import ResnetEncoder, DepthDecoder, PoseDecoder
+
+# 网络初始化
+encoder = ResnetEncoder(num_layers=18, pretrained=True, num_input_images=2)
+depth_decoder = DepthDecoder(encoder.num_ch_enc, scales=range(4))
+pose_decoder = PoseDecoder(encoder.num_ch_enc, num_input_features=2)
+
+# 前向传播
+input_images = torch.randn(1, 6, 256, 320)  # 2张RGB图像拼接
+features = encoder(input_images)
+depth_outputs = depth_decoder(features)
+axisangle, translation = pose_decoder([features])
+
+# 输出结果
+print("Depth scales:", [depth_outputs[("disp", i)].shape for i in range(4)])
+print("Pose shape:", axisangle.shape, translation.shape)
+            </div>
+        </div>
+
+        <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666;">
+            <p>© 2024 SfM Learner Network Analysis | 详细网络结构分析文档</p>
+        </footer>
+    </div>
+</body>
+</html>

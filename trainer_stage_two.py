@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-训练器第二阶段 - 使用光流和变换网络进行深度估计训练
-支持最新版本的PyTorch和torchvision
-"""
-
 from __future__ import absolute_import, division, print_function
 
 import time
@@ -119,7 +113,7 @@ class Trainer(object):
         self.models["depth"].to(self.device)
         self.parameters_to_train += list(self.models["depth"].parameters())
 
-        # 位置编码器：用于光流估计
+        # 位置编码器：用于外观流估计（Appearance Flow）
         self.models["position_encoder"] = networks.ResnetEncoder(
             self.opt.num_layers, 
             self.opt.weights_init == "pretrained", 
@@ -127,7 +121,7 @@ class Trainer(object):
         )
         self.models["position_encoder"].to(self.device)
 
-        # 位置解码器：生成光流场
+        # 位置解码器：生成外观流场（解决亮度不一致问题）
         self.models["position"] = networks.PositionDecoder(
             self.models["position_encoder"].num_ch_enc, 
             self.opt.scales
